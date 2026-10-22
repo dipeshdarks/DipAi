@@ -139,10 +139,16 @@ def estimate_finetune_vram(cfg: FinetuneConfig, param_count: Optional[int]) -> D
         weight_bytes = n * 0.56            # nf4 + double-quant + scale overhead
     else:
         weight_bytes = n * 2.0             # fp16/bf16 base weights
-    # LoRA trainable: ~2% of params for r=16 on q/k/v/o (empirical).
-    trainable = max(1_000_000, n * 0.02)
-    # fp32 master + grads + Adam m/v for adapter params.
-    adapter_optim = trainable * 16.0
+    if cfg.use_lora:
+        # LoRA trainable: ~2% of params for r=16 on q/k/v/o (empirical).
+        trainable = max(1_000_000, n * 0.02)
+        # fp32 master + grads + Adam m/v for adapter params.
+        adapter_optim = trainable * 16.0
+    else:
+        # Full-parameter CPT: every param gets fp32 master copy + grad + 2
+        # Adam moments (4 fp32 slots on top of the fp16/bf16 weights).
+        trainable = n
+        adapter_optim = n * 12.0
     # Activations: batch * seq * layers * hidden * bytes * constant / grad-ckpt.
     layers = 24 if n < 800_000_000 else 28
     hidden = 896 if n < 800_000_000 else 1536
@@ -1047,33 +1053,47 @@ def run(cfg: FinetuneConfig, do_train: bool) -> int:
             bnb_4bit_use_double_quant=cfg.bnb_4bit_use_double_quant,
         )
 
+    load_dtype = torch.float16 if cfg.fp16 else (
+        torch.bfloat16 if cfg.bf16 else torch.float32
+    )
     log.info("loading model: %s (4bit=%s) ...", cfg.model_name_or_path, cfg.load_in_4bit)
     model = AutoModelForCausalLM.from_pretrained(
         cfg.model_name_or_path,
         trust_remote_code=cfg.trust_remote_code,
         quantization_config=quant_config,
-        torch_dtype=torch.float16 if cfg.fp16 else torch.bfloat16,
+        torch_dtype=load_dtype,
         device_map="auto",
     )
     model.config.use_cache = False
 
-    # ---- LoRA ---------------------------------------------------------------
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+    if cfg.use_lora:
+        # ---- LoRA (adapter training) -------------------------------------
+        from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-    if cfg.load_in_4bit:
-        model = prepare_model_for_kbit_training(
-            model, use_gradient_checkpointing=cfg.gradient_checkpointing
+        if cfg.load_in_4bit:
+            model = prepare_model_for_kbit_training(
+                model, use_gradient_checkpointing=cfg.gradient_checkpointing
+            )
+        lora_cfg = LoraConfig(
+            r=cfg.lora.r,
+            lora_alpha=cfg.lora.lora_alpha,
+            lora_dropout=cfg.lora.lora_dropout,
+            target_modules=list(cfg.lora.target_modules),
+            bias=cfg.lora.bias,
+            task_type=cfg.lora.task_type,
         )
-    lora_cfg = LoraConfig(
-        r=cfg.lora.r,
-        lora_alpha=cfg.lora.lora_alpha,
-        lora_dropout=cfg.lora.lora_dropout,
-        target_modules=list(cfg.lora.target_modules),
-        bias=cfg.lora.bias,
-        task_type=cfg.lora.task_type,
-    )
-    model = get_peft_model(model, lora_cfg)
-    model.print_trainable_parameters()
+        model = get_peft_model(model, lora_cfg)
+        model.print_trainable_parameters()
+    else:
+        # ---- full-parameter continued-pretraining (no adapter) ------------
+        n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        log.info("full-parameter mode (use_lora: false): %s trainable params",
+                 f"{n_train:,}")
+        if cfg.gradient_checkpointing:
+            try:
+                model.gradient_checkpointing_enable()
+            except Exception:
+                pass
 
     if cfg.gradient_checkpointing:
         try:
@@ -1137,15 +1157,19 @@ def run(cfg: FinetuneConfig, do_train: bool) -> int:
         )
         return 4
 
-    # ---- save adapter + tokenizer ---------------------------------------------
-    adapter_dir = out_dir / "adapter"
-    model.save_pretrained(str(adapter_dir))
-    tokenizer.save_pretrained(str(adapter_dir))
+    # ---- save model + tokenizer ---------------------------------------------
+    if cfg.use_lora:
+        save_dir = out_dir / "adapter"
+    else:
+        save_dir = out_dir / "model"
+    model.save_pretrained(str(save_dir))
+    tokenizer.save_pretrained(str(save_dir))
     peak = torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0
-    log.info("adapter saved: %s", adapter_dir)
+    log.info("%s saved: %s",
+             "adapter" if cfg.use_lora else "model", save_dir)
     log.info("peak VRAM during training: %s", format_bytes(peak))
     log.info("fine-tune complete in %s", f"{time.perf_counter() - t0:.0f}s")
-    log.info("use it: python -m dipai.chat --adapter %s (see docs/finetune)", adapter_dir)
+    log.info("use it: python -m dipai.chat --model %s (see docs/finetune)", save_dir)
     return 0
 
 

@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dipai.generate import GenerationError, GenerationSettings
 from dipai.inference import ConversationSession, DIPAIEngine, EngineError
+from dipai.model_registry import default_registry
 from dipai.utils import setup_logging
 
 BANNER = r"""
@@ -188,6 +189,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--adapter", "-a", default=None,
                     help="PEFT adapter directory from dipai.finetune (Mode B); "
                          "overrides --ckpt")
+    ap.add_argument("--model", "-m", default=None,
+                    help="full-parameter HF model directory from dipai.finetune "
+                         "with use_lora: false (overrides --adapter and --ckpt); "
+                         "also accepts a name from the model registry")
+    ap.add_argument("--list-models", action="store_true",
+                    help="list registered models (name, backend, path) and exit")
     ap.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"])
     ap.add_argument("--temperature", type=float, default=0.8)
     ap.add_argument("--top-k", type=int, default=40)
@@ -235,8 +242,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         # even when no text checkpoint exists.
         return _run_vision(args, log)
 
+    registry = default_registry()
+    if args.list_models:
+        for name in registry.names():
+            m = registry.get(name)
+            exists = "ok" if m.exists() else "--"
+            print(f"[{exists}] {name:16s} {m.backend:8s} {m.path}")
+        return 0
+
     try:
-        if args.adapter:
+        if args.model:
+            # registry name (dispatches on its backend) or a raw HF model dir
+            engine = DIPAIEngine.from_named(args.model, device=args.device)
+        elif args.adapter:
             engine = DIPAIEngine.from_adapter(args.adapter, device=args.device)
         else:
             engine = DIPAIEngine.from_checkpoint(args.ckpt, device=args.device)

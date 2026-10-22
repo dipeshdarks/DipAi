@@ -301,6 +301,27 @@ def train(cfg: ScratchConfig, config_path: Optional[str] = None) -> int:
             except Exception as exc:
                 log.warning("grad scaler state not restored: %s", exc)
         start_step = int(payload["step"])
+        # Restore RNG state (torch + numpy) so the resumed run draws the same
+        # data order / dropout masks it would have drawn had it never stopped.
+        # Degrades gracefully: a missing/stale state just logs and reseeds.
+        import random as _random
+        try:
+            if "torch_rng" in payload and payload["torch_rng"] is not None:
+                torch.set_rng_state(
+                    payload["torch_rng"].cpu().to(torch.uint8)
+                    if torch.is_tensor(payload["torch_rng"])
+                    else torch.tensor(payload["torch_rng"], dtype=torch.uint8)
+                )
+            if "numpy_rng" in payload and payload["numpy_rng"] is not None:
+                np.random.set_state(tuple(payload["numpy_rng"]))
+            if "python_rng" in payload and payload["python_rng"] is not None:
+                _random.setstate(tuple(payload["python_rng"]))
+            log.info("restored RNG state from checkpoint (step %d)", start_step)
+        except Exception as exc:  # noqa: BLE001 - never let RNG restore abort a run
+            log.warning("could not fully restore RNG state (%s); reseeding from "
+                        "train.seed=%d (training remains correct, just a "
+                        "different data/dropout order than a continuous run)",
+                        exc, t.seed)
         log.info("resumed from %s at step %d", resume_path.name, start_step)
 
     if start_step >= t.max_iters:
@@ -499,7 +520,9 @@ def train(cfg: ScratchConfig, config_path: Optional[str] = None) -> int:
                     ckpt_dir, step, model, optimizer, scaler,
                     config=cfg.to_dict(),
                     extra={"history": history[-50:], "best_val": best_val,
-                           "torch_rng": torch.get_rng_state()},
+                           "torch_rng": torch.get_rng_state(),
+                           "numpy_rng": np.random.get_state(),
+                           "python_rng": __import__("random").getstate()},
                     tokenizer_src=t.tokenizer_path,
                     keep_last_n=t.keep_last_n,
                 )

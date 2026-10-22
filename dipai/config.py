@@ -249,6 +249,10 @@ class FinetuneConfig:
 
     # LoRA
     lora: LoraConfigData = field(default_factory=LoraConfigData)
+    # When false AND dipai_checkpoint is empty, the HF branch trains the FULL
+    # base model (continued-pretraining on raw text) instead of a LoRA adapter.
+    # Only valid with load_in_4bit: false (full params can't live in 4-bit).
+    use_lora: bool = True
 
     # training
     output_dir: str = "checkpoints/finetune"
@@ -303,6 +307,20 @@ class FinetuneConfig:
             )
         if self.fp16 and self.bf16:
             raise ConfigError("fp16 and bf16 cannot both be true")
+        if not self.use_lora and not self.dipai_checkpoint and self.load_in_4bit:
+            raise ConfigError(
+                "use_lora: false (full-parameter continued-pretraining) cannot be "
+                "combined with load_in_4bit: true. Set load_in_4bit: false, or "
+                "enable LoRA (use_lora: true)."
+            )
+        if not self.use_lora and not self.dipai_checkpoint:
+            if self.learning_rate > 1e-4:
+                # full-param updates need a gentler LR than adapter training
+                raise ConfigError(
+                    f"learning_rate {self.learning_rate:g} is too high for "
+                    "full-parameter continued-pretraining (use_lora: false). "
+                    "Use ~1e-5 to 1e-4."
+                )
         self.lora.validate()
 
     def to_dict(self) -> Dict[str, Any]:

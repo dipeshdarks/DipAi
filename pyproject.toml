@@ -54,3 +54,6 @@ include = ["dipai*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]

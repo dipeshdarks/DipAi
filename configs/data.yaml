@@ -1,0 +1,34 @@
+# DIPAI data collection config (bounded, licensed, resumable).
+#
+# The defaults here are a PILOT: tiny caps on purpose. Raise them only when
+# you deliberately want more data (and have the disk/RAM for it). Nothing in
+# this file downloads a multi-terabyte corpus.
+#
+#   python -m dipai.data.collect --config configs/data.yaml
+#   python -m dipai.data.collect --config configs/data.yaml --sources fineweb-edu
+#   python -m dipai.data.collect --config configs/data.yaml --list
+#
+# See docs/DATA_SOURCES_AND_LICENSES.md for licence notes on every source.
+
+output_dir: data/raw/web
+cache_dir: data/raw/.cache
+
+# Hard caps. A source stops as soon as EITHER limit is reached.
+max_docs_per_source: 500
+max_bytes_per_source: 20000000      # 20 MB of text per source
+max_dump_bytes: 50000000            # hard ceiling for wikimedia_dump downloads
+
+# Pilot mode collects only sources flagged pilot_default (fineweb-edu).
+# Pass --no-pilot or list `sources:` explicitly to collect more.
+pilot: true
+# sources: [fineweb-edu, wikipedia-20231101-en, oasst1]
+
+# Transport / politeness
+retry_attempts: 3
+retry_backoff: 2.0
+sleep_between_docs: 0.0
+seed: 1337
+resume: true
+
+# Optional: point HF dataset streaming cache somewhere with space
+# hf_cache: data/raw/.cache/hf

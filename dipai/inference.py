@@ -364,6 +364,127 @@ class DIPAIEngine:
         log.info("engine ready: %s", eng._status.line())
         return eng
 
+    @classmethod
+    def from_model(
+        cls,
+        model_dir: str | Path,
+        device: str = "auto",
+    ) -> "DIPAIEngine":
+        """Load a full-parameter Hugging Face model saved by Mode B.
+
+        `model_dir` is a transformers save dir (config.json + weights +
+        tokenizer files), e.g. checkpoints/finetune/model produced with
+        use_lora: false. Serves chat-template prompts like from_adapter().
+        """
+        model_dir = Path(model_dir)
+        if not model_dir.exists():
+            raise EngineError(f"model directory not found: {model_dir}")
+        if not (model_dir / "config.json").exists():
+            raise EngineError(
+                f"{model_dir} has no config.json - not a saved HF model dir. "
+                "Train one with: python -m dipai.finetune --config ... --train "
+                "(use_lora: false)"
+            )
+
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        eng = cls()
+        eng.device = get_device(device)
+
+        tok = AutoTokenizer.from_pretrained(str(model_dir), trust_remote_code=False)
+        if tok.pad_token is None:
+            tok.pad_token = tok.eos_token
+
+        use_4bit = eng.device == "cuda"
+        quant = None
+        if use_4bit:
+            from transformers import BitsAndBytesConfig
+
+            quant = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+            )
+        else:
+            log.warning(
+                "CUDA not available - loading model in full precision on CPU (slow)."
+            )
+
+        log.info("loading full model %s (4bit=%s) ...", model_dir, use_4bit)
+        model = AutoModelForCausalLM.from_pretrained(
+            str(model_dir),
+            quantization_config=quant,
+            torch_dtype=torch.float16 if use_4bit else torch.float32,
+            device_map="auto" if use_4bit else None,
+        )
+        model.eval()
+
+        eng.hf_pipeline = model
+        eng.hf_tokenizer = tok
+        eng.backend = "hf"
+        eng.checkpoint_path = str(model_dir)
+
+        trained_to = 0
+        for state in sorted(model_dir.parent.glob("checkpoint-*/trainer_state.json")):
+            try:
+                import json as _json
+
+                trained_to = max(trained_to, int(_json.loads(
+                    state.read_text(encoding="utf-8")).get("global_step", 0)))
+            except Exception:  # noqa: BLE001
+                pass
+
+        hw = probe_hardware(check_bnb=False)
+        n_params = int(getattr(model, "num_parameters", lambda: 0)())
+        try:
+            max_ctx = int(getattr(model.config, "max_position_embeddings", 0) or 2048)
+        except Exception:  # noqa: BLE001
+            max_ctx = 2048
+        eng._status = EngineStatus(
+            backend="hf-full",
+            checkpoint=str(model_dir),
+            model_params=n_params,
+            trained_to_step=trained_to,
+            device=eng.device,
+            gpu_name=hw.device_name or "",
+            vram_total_gb=hw.vram_total_gb,
+            vram_free_gb=hw.vram_free_gb,
+            vocab_size=len(tok),
+            block_size=max_ctx,
+            ready=True,
+            notes=f"full model (chat template: "
+                  f"{'yes' if tok.chat_template else 'no'})",
+        )
+        log.info("engine ready: %s", eng._status.line())
+        return eng
+
+    @classmethod
+    def from_named(
+        cls,
+        name_or_path: str,
+        device: str = "auto",
+    ) -> "DIPAIEngine":
+        """Load by registry name, dispatching on the entry's backend.
+
+        `scratch` -> from_checkpoint, `hf` -> from_adapter,
+        `hf-full` -> from_model. An unknown value is treated as a raw
+        HF-model directory (legacy `--model <dir>` behaviour), so paths keep
+        working unchanged.
+        """
+        from dipai.model_registry import ModelRegistryError, resolve_for_loading
+
+        try:
+            backend, path = resolve_for_loading(name_or_path)
+        except ModelRegistryError as exc:
+            raise EngineError(str(exc)) from None
+        log.info("resolving %r -> backend=%s path=%s", name_or_path, backend, path)
+        if backend == "scratch":
+            return cls.from_checkpoint(path, device=device)
+        if backend == "hf":
+            return cls.from_adapter(path, device=device)
+        return cls.from_model(path, device=device)
+
     # ---- generation ------------------------------------------------------
 
     def generate(
