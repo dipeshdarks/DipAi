@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dipai"
+version = "0.1.0"
+description = "DIPAI - a local, memory-efficient text LLM for consumer GPUs (DIPDARKS)"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "DIPDARKS" }]
+keywords = ["llm", "transformer", "pytorch", "local", "qlora"]
+
+dependencies = [
+    "numpy>=1.24,<2.3",
+    "PyYAML>=6.0",
+    "psutil>=5.9",
+    "sentencepiece>=0.2.0",
+    "tokenizers>=0.20",
+]
+
+[project.optional-dependencies]
+finetune = [
+    "transformers>=4.46,<5",
+    "accelerate>=1.0",
+    "peft>=0.14",
+    "safetensors>=0.4",
+    "bitsandbytes>=0.45",
+    "datasets>=3.0",
+]
+webui = [
+    "gradio>=4.44,<6",
+]
+vision = [
+    "transformers>=4.49,<5",
+    "accelerate>=1.0",
+    "Pillow>=10.0",
+]
+dev = [
+    "pytest>=8.0",
+]
+all = [
+    "dipai[finetune,vision,webui,dev]",
+]
+
+[project.scripts]
+dipai-check-hardware = "dipai.hardware:main_cli"
+
+[tool.setuptools.packages.find]
+include = ["dipai*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

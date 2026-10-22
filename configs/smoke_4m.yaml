@@ -1,0 +1,68 @@
+# DIPAI smoke-test configuration - the preserved ~4M model (Mode A).
+#
+# This is the ORIGINAL small architecture (block 256 / 4 layers / 4 heads /
+# 256-dim, measured ~4.07M params with the 3332-piece tokenizer below). It
+# exists so the full pipeline (prep -> train -> checkpoint -> chat) can be
+# validated in minutes, separately from the real DIPAI-50M run.
+#
+# Smoke workflow (from the DIPAI project root):
+#   1. python scripts/prepare_data.py --input data/raw/tinystories_50k.txt ^
+#        --tokenizer checkpoints/smoke/tokenizer.model --reuse-tokenizer ^
+#        --output-dir data/processed_smoke --block-size 256
+#   2. python -m dipai.train --config configs/smoke_4m.yaml
+#
+# Notes:
+#   * tokenizer: reuses the tokenizer trained alongside the original smoke
+#     checkpoint (vocab 3332); prepare_data --reuse-tokenizer keeps it.
+#   * ckpt_dir checkpoints/smoke4m is a SEPARATE directory so the historical
+#     checkpoints/smoke artifacts are never touched or resumed by accident.
+
+run_name: dipai-smoke-4m
+
+param_target:
+  min_params: 3500000
+  max_params: 5500000
+
+model:
+  vocab_size: 3332        # must match checkpoints/smoke/tokenizer.model
+  block_size: 256
+  n_layer: 4
+  n_head: 4
+  n_embd: 256
+  dropout: 0.1
+  bias: false
+  tie_weights: true
+
+train:
+  data_dir: data/processed_smoke
+  tokenizer_path: checkpoints/smoke/tokenizer.model
+  train_file: train.bin
+  val_file: val.bin
+
+  batch_size: 8
+  gradient_accumulation_steps: 4   # effective batch = 32
+  max_iters: 45
+  eval_interval: 45
+  eval_iters: 20
+  learning_rate: 3.0e-4
+  min_lr: 3.0e-5
+  lr_decay_iters: 45
+  warmup_iters: 10
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+
+  seed: 1337
+  device: auto
+  dtype: auto
+  num_workers: 0
+  pin_memory: false
+
+  ckpt_dir: checkpoints/smoke4m
+  save_interval: 45
+  keep_last_n: 1
+  resume: true
+  gradient_checkpointing: false
+  early_stop_val_loss: 0.0
+  early_stop_patience: 0

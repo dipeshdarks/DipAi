@@ -1,0 +1,30 @@
+# DIPAI core dependencies
+# Python 3.10 | Windows 11 | NVIDIA RTX 2050 (4 GB VRAM) | torch 2.14.1+cu126
+
+# Already satisfied by the CUDA-enabled torch wheel (do not reinstall):
+#   torch==2.14.1+cu126
+
+numpy>=1.24,<2.3
+PyYAML>=6.0
+psutil>=5.9
+
+# Tokenization
+sentencepiece>=0.2.0
+tokenizers>=0.20
+
+# Hugging Face stack (Mode B finetuning)
+transformers>=4.46,<5
+accelerate>=1.0
+peft>=0.14
+safetensors>=0.4
+bitsandbytes>=0.45          # 4-bit QLoRA; Windows CUDA wheel
+datasets>=3.0
+
+# Web UI
+gradio>=4.44,<6
+
+# Vision (image understanding via dipai.vision; SmolVLM needs transformers>=4.49)
+Pillow>=10.0
+
+# Tests
+pytest>=8.0

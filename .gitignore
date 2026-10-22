@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# DIPAI artifacts
+# Keep small docs/examples/vision samples; exclude all bulky datasets.
+data/raw/
+data/processed/*
+!data/processed/.gitkeep
+data/processed_50m/
+data/processed_smoke/
+data/processed_tinystories/
+checkpoints/
+runs/
+*.pt
+*.bin
+*.safetensors
+*.gguf
+logs/
+*.log
+*.err
+*.pid
+
+# Caches
+.ruff_cache/
+.mypy_cache/
+
+# Hugging Face cache (if set inside project)
+.cache/
+huggingface/
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Model weights should never be committed
+*.model          # sentencepiece
+tokenizer.json
+special_tokens_map.json

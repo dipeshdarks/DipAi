@@ -1,0 +1,79 @@
+The local artificial intelligence runs on a small graphics processor. It learns patterns from text one token at a time. Training is slow but the model stays on your own machine.
+
+A language model predicts the next token in a sequence. Given the words "the cat sat on the", it estimates which token is most likely to follow. Repeating this process produces longer and longer text.
+
+Graphics memory is the most important limit when training a neural network. Four gigabytes is enough for a small model but far too small for a large one. Choosing the right model size matters more than any other decision.
+
+Gradient descent works by computing how each weight affected the loss. The optimizer then adjusts every weight a small step in the opposite direction. Repeating this over many batches gradually reduces the error.
+
+A transformer block contains attention and a feed-forward network. Attention lets every token look at every earlier token. The feed-forward network processes each position independently.
+
+Data cleaning removes empty lines, duplicate paragraphs, and broken characters. Clean data produces a better tokenizer and a more stable training run. Always inspect your dataset statistics before training.
+
+The tokenizer converts text into a sequence of integer ids. Byte pair encoding starts with characters and merges frequent pairs into new tokens. The vocabulary size is a trade-off between coverage and embedding size.
+
+Checkpoints let you resume training after an interruption. A checkpoint stores the model weights, the optimizer state, and the current step number. Without checkpoints a crash would waste hours of work.
+
+Temperature controls how random the generated text is. A low temperature produces repetitive and predictable output. A high temperature produces surprising but often incoherent text.
+
+Top-p sampling keeps only the most probable tokens until their sum reaches a threshold. Top-k sampling keeps exactly the k most probable tokens. Both methods prune the tail of the distribution before sampling.
+
+Overfitting happens when the model memorizes the training data. The validation loss starts rising while the training loss keeps falling. More data, more dropout, or early stopping can help.
+
+Attention heads learn different relationships between tokens. One head might track subject and verb agreement. Another might track nearby punctuation or repeated phrases.
+
+The learning rate is the single most important training hyper-parameter. Too high and the loss diverges. Too low and training wastes time making tiny steps.
+
+Batch size and gradient accumulation are related. Accumulating four steps of batch size eight equals one step of batch size thirty-two. Accumulation lets you simulate large batches in limited memory.
+
+Mixed precision training stores activations in half precision. It cuts memory use roughly in half and runs faster on modern GPUs. The loss scale prevents underflow in the backward pass.
+
+A dataset should be split into training and validation portions. The validation split measures generalization and must never be used for weight updates. Five percent is a common split for small corpora.
+
+Text generation stops when the end of sequence token is produced or the token limit is reached. A model that never emits the stop token will generate until the limit. Both conditions are checked on every step.
+
+Word embeddings place similar words near each other in vector space. Fine tuning adjusts these positions for a specific task. A model trained on medical text learns different positions than one trained on code.
+
+Layer normalization stabilizes the activations inside a transformer block. Pre-normalization places it before the sublayer and trains more reliably. Post-normalization was used in the original transformer paper.
+
+Learning rate warmup starts the rate near zero and increases it linearly. Warmup prevents large unstable updates in the first steps. Cosine decay then slowly lowers the rate for the rest of training.
+
+Repetition penalty discourages the model from repeating the same token too often. A small penalty between one and two is usually enough. Larger penalties make the output strange and hard to read.
+
+The context window determines how much text the model can see. A longer window costs quadratic attention compute without special kernels. Two hundred fifty-six tokens is a practical starting point for a tiny model.
+
+Checkpoint retention keeps only the most recent files. Saving every step would fill the disk within minutes. Keeping three checkpoints is a reasonable default for local training.
+
+Local models have privacy advantages. Your text never leaves the machine and no API key is required. The trade-off is lower quality compared to large commercial systems.
+
+Small models trained from scratch on tiny datasets produce dataset-shaped text. They echo the topics and style of the training corpus. Expect local patterns, not general knowledge or reasoning.
+
+The optimizer stores two moving averages of each gradient. AdamW uses these to scale updates per parameter. This state often takes more memory than the model weights themselves.
+
+Gradient clipping prevents exploding gradients from destroying training. When the norm exceeds a threshold, the update is scaled down. A clip value of one is a safe default.
+
+Validation measures the model on unseen data at regular intervals. The evaluation loss should trend downward like the training loss. A rising validation loss signals overfitting.
+
+Streaming data loading reads only the batches that are needed. The full dataset never sits in memory at once. This keeps training feasible on machines with limited random access memory.
+
+Export converts a checkpoint into a portable file. Safetensors is a safe and fast format for sharing weights. Loading a checkpoint restores the model, the tokenizer, and the training configuration.
+
+A chat interface needs temperature, top-p, top-k, and a token limit. These controls change how the model samples its response. Good defaults matter more than many sliders.
+
+Fine tuning adjusts a pretrained model on a smaller custom dataset. Low rank adaptation trains tiny matrices instead of the full weights. This reduces both memory use and training time.
+
+Quantization stores weights in four bits instead of sixteen. It cuts memory use roughly fourfold with a small quality cost. QLoRA combines quantization with low rank adaptation.
+
+The graphics driver must support the CUDA version used by the framework. Installing a CUDA wheel does not install the driver. Check availability with torch dot cuda dot is available.
+
+Reproducible seeds make experiments comparable across runs. The same seed produces the same data order and the same dropout mask. Perfect reproducibility still depends on the hardware and library versions.
+
+The first token of every training sequence is the beginning of sequence marker. The last token is the end of sequence marker. These two markers teach the model where documents start and stop.
+
+Monitoring the training loss curve catches problems early. A flat curve means the learning rate is too low. A spiking curve means the learning rate is too high or the data is noisy.
+
+Profiling measures where each training step spends time. Data loading, the forward pass, the backward pass, and the optimizer step are the four main phases. The slowest phase shows where to optimize next.
+
+Security matters even in local projects. Never commit model weights, private datasets, or API keys to a repository. The ignore file keeps large and sensitive artifacts out of version control.
+
+The end. This synthetic corpus exists solely for smoke testing the DIPAI pipeline. It is intentionally short and domain-limited. Do not expect a model trained on it to be a capable assistant.

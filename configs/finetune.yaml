@@ -1,0 +1,52 @@
+# DIPAI Mode B - fine-tune a compact pretrained causal LM with LoRA / QLoRA.
+# Default target: Qwen/Qwen2.5-0.5B-Instruct (fits RTX 2050 4 GB with 4-bit).
+#
+# IMPORTANT: weights are downloaded from Hugging Face only when you run
+# dipai/finetune.py with this config. Nothing is fetched at import time.
+
+model_name_or_path: Qwen/Qwen2.5-0.5B-Instruct
+trust_remote_code: false
+
+# 4-bit QLoRA (bitsandbytes). Requires a CUDA GPU + bitsandbytes wheel.
+# Set load_in_4bit: false to fine-tune in fp16 (needs more VRAM; may OOM).
+load_in_4bit: true
+bnb_4bit_compute_dtype: float16   # float16 | bfloat16
+bnb_4bit_quant_type: nf4
+bnb_4bit_use_double_quant: true
+
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+  bias: none
+  task_type: CAUSAL_LM
+
+output_dir: checkpoints/finetune
+max_seq_length: 512
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 2.0e-4
+num_train_epochs: 1.0
+max_steps: -1              # -1 -> use epochs; set a positive int to cap steps
+warmup_ratio: 0.03
+weight_decay: 0.01
+fp16: true
+bf16: false
+gradient_checkpointing: true
+logging_steps: 10
+save_steps: 200
+save_total_limit: 2
+seed: 1337
+resume_from_checkpoint: null
+
+# data: JSONL file with a "text" field per line (see docs/DATASET_GUIDE.md)
+dataset_path: data/processed/finetune.jsonl
+max_samples: -1            # -1 -> use every sample
+
+# print a VRAM estimate and stop before loading the model
+dry_run_vram_check: true

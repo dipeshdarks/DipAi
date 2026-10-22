@@ -1,0 +1,67 @@
+# DIPAI Mode A - train a ~20M-parameter decoder-only Transformer from scratch.
+# Target: RTX 2050 4 GB VRAM / ~6 GB RAM / Windows 11.
+# Every value here is overridable; nothing is changed silently at runtime.
+#
+# Architecture (standard GPT-style scaling):
+#   n_embd 512, n_layer 6, n_head 8 -> head_dim 64
+#   feed-forward = 4 x n_embd = 2048 (built into model.MLP)
+#   vocab 4104 (measured: prepare_data.py --vocab-size 4096 -> SP trains to
+#   requested+8; train.py auto-syncs model vocab to the tokenizer in any case)
+#   tied input/output embeddings (tie_weights: true)
+#   measured parameter count: ~21.11M (21,113,344)
+#
+# Data: combined corpus (TinyStories 50k + OASST1 English messages) packed by
+# scripts/prepare_data.py with --reuse-tokenizer, so checkpoints trained on
+# the earlier stories-only data remain resumable.
+#
+# Training history: step 1..2000 = stories-only corpus (val 2.6785).
+# max_iters extends the run to 6000 on the combined corpus. lr_decay_iters
+# stays at 2000: the original cosine schedule already ended at min_lr, so the
+# continuation runs at the stable min_lr tail (no LR jump mid-run).
+
+run_name: dipai-scratch-20m
+
+model:
+  vocab_size: 4104        # MUST match tokenizer vocab (see data/processed)
+  block_size: 256         # context length in tokens
+  n_layer: 6
+  n_head: 8
+  n_embd: 512
+  dropout: 0.1
+  bias: false
+  tie_weights: true
+
+train:
+  # data (produced by scripts/prepare_data.py)
+  data_dir: data/processed
+  tokenizer_path: data/processed/tokenizer.model
+  train_file: train.bin
+  val_file: val.bin
+
+  # optimization
+  batch_size: 8
+  gradient_accumulation_steps: 4   # effective batch = 32
+  max_iters: 6000
+  eval_interval: 200
+  eval_iters: 50
+  learning_rate: 3.0e-4
+  min_lr: 3.0e-5
+  lr_decay_iters: 2000   # schedule from the original run; >max stays at min_lr
+  warmup_iters: 100
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+
+  # system
+  seed: 1337
+  device: auto            # auto | cuda | cpu
+  dtype: auto             # auto | float16 | bfloat16 | float32
+  num_workers: 0          # keep 0 on low-RAM machines
+  pin_memory: false
+
+  # checkpointing
+  ckpt_dir: checkpoints/scratch
+  save_interval: 500
+  keep_last_n: 3
+  resume: true

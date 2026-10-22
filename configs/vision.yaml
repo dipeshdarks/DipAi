@@ -1,0 +1,50 @@
+# DIPAI vision - image understanding with a small pretrained VLM.
+# Target: RTX 2050 4 GB VRAM / ~6 GB RAM / Windows 11.
+#
+# This config is loaded by dipai.vision ONLY. It never touches the scratch
+# model's vocabulary, checkpoints, or training. If this file is missing,
+# the defaults below are used (text-only setups keep working unchanged).
+
+# ---------------------------------------------------------------------------
+# Model selection (HF model id or a local directory)
+# ---------------------------------------------------------------------------
+# HuggingFaceTB/SmolVLM-256M-Instruct
+#   * license: Apache-2.0
+#   * 256,484,928 params (bf16 weights ~513 MB)
+#   * architecture: Idefics3ForConditionalGeneration
+#     (SmolLM2-135M-Instruct language model + SigLIP-base vision encoder)
+#   * requires transformers >= 4.49 (verified with the installed 4.57.6)
+# Alternatives: HuggingFaceTB/SmolVLM-500M-Instruct (~1.0 GB, better quality,
+# still fits 4 GB VRAM but slower).
+model_id: HuggingFaceTB/SmolVLM-256M-Instruct
+
+# ---------------------------------------------------------------------------
+# Device / dtype
+# ---------------------------------------------------------------------------
+device: auto            # auto | cuda | cpu  (auto = cuda when available)
+dtype: auto             # auto | float16 | bfloat16 | float32
+                        # auto = float16 on cuda, float32 on cpu
+cpu_fallback: true      # if CUDA runs out of memory, retry on CPU (slower)
+
+# ---------------------------------------------------------------------------
+# Loading behaviour
+# ---------------------------------------------------------------------------
+load_on_startup: false  # false = load on the FIRST image request (text-only
+                        # chat starts instantly and never loads the VLM)
+low_cpu_mem_usage: true # stream weights from disk (low system-RAM machines)
+local_files_only: false # true = never contact huggingface.co (weights must
+                        # already be cached locally)
+
+# ---------------------------------------------------------------------------
+# Upload safety limits
+# ---------------------------------------------------------------------------
+max_upload_mb: 10.0     # reject image files larger than this
+max_image_side: 4096    # reject images with width OR height above this (px)
+max_image_pixels: 4000000  # reject images with width*height above this (px)
+
+# ---------------------------------------------------------------------------
+# Generation (bounded output)
+# ---------------------------------------------------------------------------
+max_new_tokens: 256     # hard cap on generated tokens
+temperature: 0.2        # 0 = greedy/deterministic; 0.2 = light sampling
+top_p: 0.95             # nucleus sampling threshold (1.0 = off)

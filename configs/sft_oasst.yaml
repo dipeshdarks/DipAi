@@ -1,0 +1,45 @@
+# DIPAI-50M supervised fine-tuning (Stage 2) on reconstructed OASST1
+# conversations (Apache-2.0), with loss masked on user/prompt tokens.
+#
+# This config selects the NATIVE DIPAI branch of dipai/finetune.py:
+#   * dipai_checkpoint != ""  -> full-parameter fine-tune of a local DIPAI
+#     scratch checkpoint (Hugging Face model_name_or_path / LoRA / 4-bit
+#     settings below are NOT used in this branch; the CLI logs this).
+#   * dataset schema: {"messages": [{"role": "user"|"assistant", ...}, ...]}
+#     built by scripts/prepare_finetune_data.py --oasst-threads
+#   * train/val are split by conversation TREE upstream -> no leakage.
+#
+# Run:
+#   python -m dipai.finetune --config configs/sft_oasst.yaml              # dry run
+#   python -m dipai.finetune --config configs/sft_oasst.yaml --train      # train
+
+# --- native DIPAI branch (used) ------------------------------------------
+dipai_checkpoint: checkpoints/50m
+dataset_path: data/processed/sft_train.jsonl
+val_dataset_path: data/processed/sft_val.jsonl
+max_seq_length: 256                  # matches the DIPAI-50M context window
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8       # effective batch = 16
+learning_rate: 1.0e-5                # full-parameter SFT: small LR
+num_train_epochs: 1.0
+max_steps: 1055                      # full epoch: 16,876 train records / effective batch 16 = 1054.75
+                                     # (pilot run was capped at 300; val still improved 3.18->3.13, so extended)
+warmup_ratio: 0.05
+weight_decay: 0.01
+fp16: true
+bf16: false
+gradient_checkpointing: true
+logging_steps: 10
+save_steps: 100
+save_total_limit: 2
+seed: 1337
+output_dir: checkpoints/sft50m_v2   # v1 (300-step pilot) preserved untouched in checkpoints/sft50m
+max_samples: -1
+resume_from_checkpoint: null
+
+# --- HF LoRA branch (ignored when dipai_checkpoint is set) ---------------
+model_name_or_path: Qwen/Qwen2.5-0.5B-Instruct
+load_in_4bit: true
+
+# print a VRAM estimate and stop before loading the model
+dry_run_vram_check: true

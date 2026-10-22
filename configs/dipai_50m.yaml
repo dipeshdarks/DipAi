@@ -1,0 +1,83 @@
+# DIPAI-50M - decoder-only Transformer trained from RANDOM INIT on licensed
+# real data (English Wikipedia pretraining stage; OASST1 SFT happens later
+# via configs/sft_oasst.yaml).
+#
+# Target hardware: RTX 2050 Laptop 4 GB VRAM / ~6 GB RAM / Windows 11.
+#
+# Architecture math (bias: false, tied embeddings, FFN = 4 x n_embd):
+#   per layer = 4*d^2 (qkv+proj) + 8*d^2 (mlp) + 2*d (2 LayerNorms)
+#             = 12*512^2 + 2*512           = 3,146,752
+#   layers    = 15 * 3,146,752             = 47,201,280
+#   embedding = 4104 * 512                 =  2,101,248   (vocab trained by
+#               prepare_data --vocab-size 4096 -> 4096 + 8 special pieces)
+#   positions = 256 * 512                  =    131,072
+#   final LN  = 512                        =        512
+#   total                                   = 49,434,112  (~49.43M)
+#
+#   -> inside the required 45M-55M band, close to the 50M target.
+#   scripts/estimate_model.py verifies estimate == measured at startup, and
+#   param_target below makes training FAIL if the built model is out of band.
+#
+# Data (see data/README.md for license log):
+#   pretraining corpus : English Wikipedia snapshot 20231101 (wikimedia/wikipedia,
+#                        GFDL-1.3 OR CC-BY-SA-3.0), streamed subset -> data/raw/
+#   tokenizer          : SentencePiece BPE trained ONLY on that approved corpus
+#   packed bins        : data/processed_50m (uint16, memmapped, doc-level split)
+#
+# Memory strategy: microbatch 4 + gradient accumulation 8 (effective 32),
+# fp16 autocast (dtype: auto), gradient checkpointing ON, num_workers 0.
+# Checkpoints keep_last_n: 2 (~600 MB each: model + Adam moments).
+
+run_name: dipai-50m
+
+param_target:
+  min_params: 45000000
+  max_params: 55000000
+
+model:
+  vocab_size: 4104        # auto-synced to the tokenizer by train.py (logged)
+  block_size: 256         # context length (spec: 256 initially)
+  n_layer: 15             # depth chosen to land in the 45M-55M band
+  n_head: 8               # head_dim 64
+  n_embd: 512             # FFN = 4 x 512 = 2048 (model.MLP), GELU, pre-LN
+  dropout: 0.1
+  bias: false
+  tie_weights: true
+
+train:
+  # data (produced by scripts/download_wikipedia.py + scripts/prepare_data.py)
+  data_dir: data/processed_50m
+  tokenizer_path: data/processed_50m/tokenizer.model
+  train_file: train.bin
+  val_file: val.bin
+
+  # optimization
+  batch_size: 4                       # microbatch (memory-safe start)
+  gradient_accumulation_steps: 8      # effective batch = 32
+  max_iters: 6000
+  eval_interval: 250
+  eval_iters: 40
+  learning_rate: 6.0e-4
+  min_lr: 6.0e-5
+  lr_decay_iters: 6000                # cosine over the whole run
+  warmup_iters: 200
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+
+  # system
+  seed: 1337
+  device: auto
+  dtype: auto             # fp16 autocast on CUDA (AMP); fp32 fallback on CPU
+  num_workers: 0
+  pin_memory: false
+
+  # checkpointing / stopping
+  ckpt_dir: checkpoints/50m
+  save_interval: 500
+  keep_last_n: 2
+  resume: true
+  gradient_checkpointing: true
+  early_stop_val_loss: 0.0            # 0 = disabled (explicit stop = max_iters)
+  early_stop_patience: 0              # 0 = disabled
